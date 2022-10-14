@@ -1,0 +1,279 @@
+
+#Importing req libralies
+from sys import argv
+import numpy as np
+import math
+
+
+#class defined to hold the characteristics of different components like resistor, capacior, inductor,vol source , current source
+class Resistor:
+    
+    def __init__(self, name, n1, n2, value):
+        self.name = name
+        self.n1 = n1
+        self.n2 = n2
+        self.value = value
+
+    #Matrix entries for resistor
+    def MatxEntries(self,name, n1, n2, value, CON):
+        z = float(value)
+        if(n1 != 'GND' and n2 != 'GND'):
+            a = int(n1)-1
+            b = int(n2)-1
+            
+    
+            CON[a][a] += 1.0 / z
+            CON[a][b] += -1.0 / z
+            CON[b][a] += -1.0 / z
+            CON[b][b] += 1.0 / z
+        
+        if(n1 == 'GND'):
+            b = int(n2)-1
+           
+        
+            CON[b][b] += 1.0 / z
+
+        if(n2 == 'GND'):
+            a = int(n1)-1
+           
+        
+            CON[a][a] += 1.0 / z    
+
+
+class Inductor:
+    def __init__(self, name, n1, n2, value):
+        self.name = name
+        self.n1 = n1
+        self.n2 = n2
+        self.value = value
+
+    #Matrix entries for inductor
+    def MatxEntries(self,name, n1, n2, value, CON):
+        z = complex(0,(ang_freq*float(value)))
+        if(n1 != 'GND' and n2 != 'GND'):
+            a = int(n1)-1
+            b = int(n2)-1
+           
+        
+            CON[a][a] += 1.0 / z
+            CON[a][b] += -1.0 / z
+            CON[b][a] += -1.0 / z
+            CON[b][b] += 1.0 / z
+        
+        if(n1 == 'GND'):
+            b = int(n2)-1
+            
+        
+            CON[b][b] += 1.0 / z
+
+        if(n2 == 'GND'):
+            a = int(n1)-1
+           
+        
+            CON[a][a] += 1.0 / z 
+
+
+class Capacitor:
+    def __init__(self, name, n1, n2, value):
+        self.name = name
+        self.n1 = n1
+        self.n2 = n2
+        self.value = value
+
+   #Matrix entries for capacitor
+    def MatxEntries(self,name, n1, n2, value, CON):
+        z = complex(0,-1/(ang_freq*float(value)))
+        if(n1 != 'GND' and n2 != 'GND'):
+            a = int(n1)-1
+            b = int(n2)-1
+            
+        
+            CON[a][a] += 1.0 / z
+            CON[a][b] += -1.0 / z
+            CON[b][a] += -1.0 / z
+            CON[b][b] += 1.0 / z
+        
+        if(n1 == 'GND'):
+            b = int(n2)-1
+            
+        
+            CON[b][b] += 1.0 / z
+
+        if(n2 == 'GND'):
+            a = int(n1)-1
+            
+        
+            CON[a][a] += 1.0 / z 
+
+
+class voltageSource:
+    def __init__(self, name, n1, n2, value):
+        self.name = name
+        self.n1 = n1
+        self.n2 = n2
+        self.value = value
+     
+
+    #MNA entries for a independent voltage source
+    def MatxEntries(self,name, n1, n2, value, CON,I,count,nodecnt):
+        count += 1
+        Vkl = nodecnt + count -1
+        if n1 != 'GND' and n2 != 'GND' :
+            a = int(n1)-1
+            b = int(n2)-1
+            CON[a][Vkl] = 1
+            CON[b][Vkl] = -1
+            CON[Vkl][a] = 1
+            CON[Vkl][b] = -1
+
+        elif n1 == 'GND' :
+            b = int(n2)-1
+            CON[Vkl][b] = -1
+            CON[b][Vkl] = -1
+        else :
+            a = int(n1)-1
+            CON[Vkl][a] = -1
+            CON[a][Vkl] = -1
+        
+        I[Vkl][0] = value
+
+class CurrentSource:
+    def __init__(self, name, n1, n2, value):
+        self.name = name
+        self.n1 = n1
+        self.n2 = n2
+        self.value = value
+
+    #Matrix entries for independent current source
+    def fillMatrix(self,name, n1, n2,I, value):
+        if n1 != 'GND' and n2 != 'GND' :
+            a = int(n1)-1
+            b = int(n2)-1
+            I[a] = -value
+            I[b] = value 
+
+        if n1 == "GND":
+            b = int(n2)-1
+            I[b] = value
+        if n2 == 'GND':
+            a = int(n1) -1 
+            I[a] = -value
+
+#counting the number of nodes in the circuit
+def no_of_nodes(lines):
+    cnt=0
+    for line in lines:
+        allLines = line.split('#')[0].split()
+        
+        if(allLines[1] != 'GND'):
+            if(int(allLines[1]) > cnt):
+                cnt = int(allLines[1])
+        if(allLines[2] != 'GND'):
+            if(int(allLines[2]) > cnt):
+                cnt = int(allLines[2])        
+    return cnt
+
+ #counting the number of voltage sources   
+def no_of_vol_srcs(lines):
+    vol_cnt=0
+    for line in lines:
+        allLines = line.split('#')[0].split()
+
+        if(allLines[0][0] == "V"):
+            vol_cnt += 1
+    return vol_cnt       
+
+        
+#Declaring constant variables for better readability
+CIRCUIT = '.circuit'
+END = '.end'
+AC = '.ac'
+
+#initialising a list called allLines with null
+allLines = [] 
+count =0     # To count the index of voltage source
+# The program will throw in an error if there isn't exactly 2 arguments in the commandline.
+if len(argv) != 2:
+    print('Please make sure that number of arguments must be 2')
+    exit()
+try:
+    with open(argv[1]) as f:
+        data = f.readlines() #reading the lines in the file
+        f.close() 
+        
+        start = -1; end = -2; cnt_s=0; cnt_e=0
+
+        for line in data:              # extracting circuit definition start and end lines
+            if  CIRCUIT== line[:len(CIRCUIT)]:
+                start = data.index(line)
+                cnt_s = cnt_s+1
+               
+            elif END== line[:len(END)]:
+                end = data.index(line)
+                cnt_e = cnt_e+1
+
+            elif AC == line[:len(AC)]:
+                ac = data.index(line)  
+                ac_allLines = line.split()
+                ang_freq=2*math.pi*float(ac_allLines[-1]) #angular frequency of the ac circuit
+
+#validating circuit block,i.e. '.circuit' should always ahead of '.end'
+        if start >= end or cnt_s!=1 or cnt_e!=1 :
+            print("Invalid circuit definition")
+        else :
+            for i in range(start+1, end):
+                temp = ((data[i].split('#')[0].split()))
+                allLines.append(temp)
+               
+
+        node_cnt = no_of_nodes(data[start+1 : end]) #m = no. of nodes in circuit
+        vol_cnt = no_of_vol_srcs(data[start+1 : end])  #n = no. of voltage sources in the circuit
+        order_matrix = node_cnt + vol_cnt # m+n gives the order of the G matrix
+
+        cond = np.zeros((order_matrix,order_matrix), dtype="complex")  # Conductance matrix
+        I = np.zeros((order_matrix,1), dtype="complex")  # Vector of independent sources
+
+        for line in allLines:
+            #Resistor 
+            if(line[0][0] == 'R'):
+               Element = Resistor(line[0],line[1],line[2],line[3])
+               Element.MatxEntries(line[0],line[1],line[2],line[3], cond)
+            #Capacitor    
+            if(line[0][0] == 'C'):
+               Element = Capacitor(line[0],line[1],line[2],line[3])
+               Element.MatxEntries(line[0],line[1],line[2],line[3], cond)
+            #Inductor
+            if(line[0][0] == 'L'):
+               Element = Inductor(line[0],line[1],line[2],line[3])
+               Element.MatxEntries(line[0],line[1],line[2],line[3], cond)
+            #Ind Voltage source
+            if(line[0][0] == 'V'):
+                if(line[3] == 'ac'):
+                    line[4] = complex(float(line[-2])*math.cos(float(line[-1]))/2,float(line[-2])*math.sin(float(line[-1]))/2)
+                    Element = voltageSource(line[0],line[1],line[2],line[4])
+                    Element.MatxEntries(line[0],line[1],line[2],line[4],cond,I,count, node_cnt)
+                else:
+                   Element = voltageSource(line[0],line[1],line[2],line[3])
+                   Element.MatxEntries(line[0],line[1],line[2],line[3],cond,I,count, node_cnt)
+            #Ind current source
+            if(line[0][0] == 'I'):
+                if(line[3] == 'ac'):
+                    line[4] = complex(float(line[-2])*math.cos(float(line[-1]))/2,float(line[-2])*math.sin(float(line[-1]))/2)
+                    Element = voltageSource(line[0],line[1],line[2],line[4])
+                    Element.MatxEntries(line[0],line[1],line[2],line[4],I)
+                else:
+                   Element = voltageSource(line[0],line[1],line[2],line[3])
+                   Element.MatxEntries(line[0],line[1],line[2],line[3],I)
+                    
+        #Solving for V matrix GV = I; V = inv(G)I
+        V = np.linalg.solve(cond, I)
+        
+        for i in range(node_cnt):
+            print("THE VALUE OF THE VOLTAGE AT  NODE V", i + 1, "=", V[i], "\n")
+        for j in range(vol_cnt):
+            print("THE VALUE OF THE CURRENT I", j + 1, "=", V[j + node_cnt- 1], "\n")
+            
+except IOError:
+    print('Invalid file/incorrect file name')
+    exit()               
+        
